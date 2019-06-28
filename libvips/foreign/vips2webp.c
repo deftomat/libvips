@@ -456,10 +456,7 @@ static int
 vips_webp_add_chunks( VipsWebPWrite *write, VipsImage *image )
 {
 	int i;
-
-	if( vips_image_get_typeof( image, "gif-loop" ) )
-		vips_webp_set_count( write, get_int( image, "gif-loop", 0 ) );
-
+	
 	for( i = 0; i < vips__n_webp_names; i++ ) { 
 		const char *vips_name = vips__webp_names[i].vips;
 		const char *webp_name = vips__webp_names[i].webp;
@@ -480,14 +477,9 @@ vips_webp_add_chunks( VipsWebPWrite *write, VipsImage *image )
 }
 
 static int 
-vips_webp_add_metadata( VipsWebPWrite *write, VipsImage *image )
+vips_webp_add_metadata( VipsWebPWrite *write, VipsImage *image, gboolean stripExif )
 {
 	WebPData data;
-
-	/* Rebuild the EXIF block, if any, ready for writing. 
-	 */
-	if( vips__exif_update( image ) )
-		return( -1 ); 
 
 	data.bytes = write->memory_writer.mem;
 	data.size = write->memory_writer.size;
@@ -499,10 +491,20 @@ vips_webp_add_metadata( VipsWebPWrite *write, VipsImage *image )
 		return( -1 );
 	}
 
-	/* Add extra metadata.
-	 */
-	if( vips_webp_add_chunks( write, image ) ) 
-		return( -1 );
+	if( vips_image_get_typeof( image, "gif-loop" ) )
+		vips_webp_set_count( write, get_int( image, "gif-loop", 0 ) );
+
+	if( !stripExif ) {
+		/* Rebuild the EXIF block, if any, ready for writing. 
+	   */
+		if( vips__exif_update( image ) )
+			return( -1 ); 
+		
+		/* Add extra metadata.
+	 	 */
+		if( vips_webp_add_chunks( write, image ) ) 
+			return( -1 );
+	}
 
 	if( WebPMuxAssemble( write->mux, &data ) != WEBP_MUX_OK ) {
 		vips_error( "vips2webp", "%s", _( "mux error" ) );
@@ -539,8 +541,7 @@ vips__webp_write_file( VipsImage *image, const char *filename,
 		return( -1 );
 	}
 
-	if( !strip &&
-		vips_webp_add_metadata( &write, image ) ) {
+	if( vips_webp_add_metadata( &write, image, strip ) ) {
 		vips_webp_write_unset( &write );
 		return( -1 );
 	}
@@ -584,8 +585,7 @@ vips__webp_write_buffer( VipsImage *image, void **obuf, size_t *olen,
 		return( -1 );
 	}
 
-	if( !strip &&
-		vips_webp_add_metadata( &write, image ) ) {
+	if( vips_webp_add_metadata( &write, image, strip ) ) {
 		vips_webp_write_unset( &write );
 		return( -1 );
 	}
